@@ -1,0 +1,44 @@
+name: Build DeskAnchor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      CODE_SIGN_IDENTITY: "-"
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check generated files are not tracked
+        run: |
+          tracked=$(git ls-files -- .build build dist .local)
+          if [[ -n "$tracked" ]]; then
+            echo "Generated or local files must not be committed:"
+            echo "$tracked"
+            exit 1
+          fi
+      - name: Run tests
+        run: make test
+      - name: Build and package universal app
+        run: make release
+      - name: Upload download-ready files
+        uses: actions/upload-artifact@v7
+        with:
+          name: DeskAnchor-macOS
+          path: |
+            dist/DeskAnchor-*-macos-universal.zip
+            dist/DeskAnchor-*-macos-universal.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
