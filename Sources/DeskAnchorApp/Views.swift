@@ -205,6 +205,7 @@ struct LayoutDetail: View {
                     Metric(value: layout.displays.count, label: "monitor", icon: "display")
                     Metric(value: layout.displays.reduce(0) { $0 + $1.spaces.count }, label: "desktop", icon: "rectangle.3.group")
                 }
+                DisplayArrangementSection(store: store, layout: layout)
                 VStack(alignment: .leading, spacing: 14) {
                     Text("MONITOR E DESKTOP").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     ForEach(layout.displays) { display in
@@ -268,6 +269,67 @@ struct LayoutDetail: View {
         .onAppear { name = layout.name }.onChange(of: layout.name) { name = $0 }
         .confirmationDialog("Eliminare «\(layout.name)»?", isPresented: $confirmDelete) { Button("Elimina", role: .destructive) { store.delete(layout) } }
         .sheet(item: $editingWindow) { window in EditWindowView(window: window, displays: layout.displays) { store.editWindow($0, in: layout) } }
+    }
+}
+struct DisplayArrangementSection: View {
+    @ObservedObject var store: AppStore
+    let layout: WorkspaceCore.Layout
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("DISPOSIZIONE MONITOR").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Button("Salva disposizione attuale") { store.saveDisplayArrangement(in: layout) }
+            }
+            if let arrangement = layout.displayArrangement {
+                Toggle("Ripristina la disposizione prima delle finestre", isOn: Binding(
+                    get: { layout.displayArrangement?.enabled == true },
+                    set: { store.setDisplayArrangementEnabled($0, in: layout) }))
+                DisplayArrangementPreview(arrangement: arrangement).frame(height: 150)
+                ForEach(Array(arrangement.displays.enumerated()), id: \.element.id) { index, display in
+                    HStack {
+                        Text("\(index + 1). \(display.name)").font(.callout)
+                        if display.isPrimary { Text("Principale").font(.caption).foregroundStyle(brandColor) }
+                        Spacer()
+                        Text("x \(Int(display.frame.x)), y \(Int(display.frame.y))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Posizioni e schermo principale vengono ripristinati quando sono collegati gli stessi monitor con le dimensioni salvate. Il ripristino di una singola finestra conserva la disposizione attuale.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Nessuna disposizione salvata. Disponi i monitor in Impostazioni di Sistema → Schermi, poi salva la disposizione attuale per questo layout.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Text("Per applicarla al collegamento, abilita “Ripristina il layout attivo quando cambiano i monitor” nelle impostazioni.")
+                .font(.caption).foregroundStyle(.secondary)
+        }.padding(16).background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+struct DisplayArrangementPreview: View {
+    let arrangement: DisplayArrangement
+    var body: some View {
+        GeometryReader { proxy in
+            let displays = arrangement.displays
+            let minX = displays.map(\.frame.x).min() ?? 0
+            let minY = displays.map(\.frame.y).min() ?? 0
+            let width = (displays.map { $0.frame.x + $0.frame.width }.max() ?? 1) - minX
+            let height = (displays.map { $0.frame.y + $0.frame.height }.max() ?? 1) - minY
+            let scale = min((proxy.size.width - 16) / max(width, 1), (proxy.size.height - 16) / max(height, 1))
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(displays.enumerated()), id: \.element.id) { index, display in
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(brandColor.opacity(display.isPrimary ? 0.2 : 0.08))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(brandColor.opacity(0.6), lineWidth: 1))
+                        .overlay(alignment: .top) {
+                            if display.isPrimary { Capsule().fill(brandColor).frame(height: 4).padding(.horizontal, 5).padding(.top, 4) }
+                        }
+                        .overlay(Text("\(index + 1)").font(.callout.weight(.semibold)).foregroundStyle(brandColor))
+                        .frame(width: max(1, display.frame.width * scale - 3), height: max(1, display.frame.height * scale - 3))
+                        .offset(x: (display.frame.x - minX) * scale, y: (display.frame.y - minY) * scale)
+                }
+            }.frame(width: width * scale, height: height * scale, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.accessibilityLabel("Disposizione salvata di \(arrangement.displays.count) monitor; la barra blu indica lo schermo principale.")
     }
 }
 struct Metric: View {

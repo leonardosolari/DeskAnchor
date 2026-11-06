@@ -10,6 +10,7 @@ Early release. macOS Spaces support uses private APIs, so compatibility can vary
 
 - Save an entire workspace, the visible desktops or the active desktop.
 - Restore window positions, sizes and visibility across multiple displays.
+- Save and restore monitor arrangement and the primary display before restoring windows.
 - Restore onto saved, visible or new desktops, with optional application launching.
 - Update a complete layout or just the active desktop.
 - Exclude applications globally or per layout.
@@ -107,6 +108,20 @@ This signs the application locally; it does not notarize or upload it. Reuse the
 
 The interface is currently in Italian. Settings pages are directly accessible from the sidebar. **⌘N** opens a new layout; **⌘,** opens settings. Additional restore modes and focused-window actions are grouped under **Altre azioni** in the menu bar.
 
+### Monitor setups
+
+New layouts also save the relative positions of extended displays and the primary display. For example, a saved office setup can put the external monitor back to the right of the Mac when macOS reconnects it above the built-in screen. Display arrangement is applied and verified before restoring windows.
+
+In a layout’s **Disposizione monitor** section:
+
+- The preview shows saved positions; the blue bar marks the primary display.
+- **Salva disposizione attuale** saves the current monitor setup without replacing saved windows. Use this to add a setup to an existing layout after arranging displays in System Settings.
+- **Ripristina la disposizione prima delle finestre** enables or disables arrangement restoration for that layout.
+
+To restore on reconnection, enable **Ripristina il layout attivo quando cambiano i monitor** in Settings. This applies the active layout, including its saved monitor arrangement, without launching closed apps.
+
+Arrangement restoration requires the exact saved display UUIDs and logical dimensions. Missing, additional or replacement monitors, changed resolution/rotation and mirroring produce an explicit warning; windows still use the existing display adaptation setting. DeskAnchor does not change resolution, rotation or mirroring. Changes last for the current login session. Restoring a single window leaves monitor arrangement alone. Updating only the active desktop preserves the saved setup; a full update captures the current setup and retains its enabled/disabled preference. Older layouts keep their previous behavior until a display arrangement is saved or the full layout is updated.
+
 If the Accessibility switch is enabled but access is still denied, quit DeskAnchor, remove its existing entry from Accessibility, add the current application again, then reopen it. **Mostra questa app** in the permission banner locates the exact bundle.
 
 ## Command line
@@ -132,7 +147,7 @@ Layouts and preferences are stored in:
 ~/Library/Application Support/DeskAnchor/library.json
 ```
 
-Writes are atomic. `library.json.backup` contains the previous version. Exported JSON includes window titles, application identifiers and paths, geometry and desktop assignments.
+Writes are atomic. `library.json.backup` contains the previous version. Exported JSON includes window titles, application identifiers and paths, geometry, desktop assignments and saved monitor arrangements.
 
 On first launch, DeskAnchor copies a supported earlier development archive if no new archive exists. The previous archive is preserved. Subsequent launches use the new archive. A renamed application needs its own Accessibility approval.
 

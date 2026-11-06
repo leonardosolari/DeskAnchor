@@ -6,8 +6,11 @@ struct RestoreReport {
     var missing = 0
     var failed = 0
     var warnings: [String] = []
+    var displayArrangementRestored = false
+    var displayArrangementFailed = false
     var summary: String {
-        let base = "\(restored) finestre ripristinate, \(missing) non trovate, \(failed) non riuscite."
+        let base = (displayArrangementRestored ? "Disposizione monitor ripristinata. " : "") +
+            "\(restored) finestre ripristinate, \(missing) non trovate, \(failed) non riuscite."
         return warnings.isEmpty ? base : base + "\n" + warnings.joined(separator: "\n")
     }
 }
@@ -22,15 +25,23 @@ struct RestoreReport {
         try AX.requirePermission(); try layout.validate()
         let excluded = preferences.excludedAppIDs.union(layout.excludedAppIDs)
         let savedWindows = layout.windows.filter { !excluded.contains($0.appID) }
-        let beforeDisplays = try spaces.displays()
+        var beforeDisplays = try spaces.displays()
         let initialFront = NSWorkspace.shared.frontmostApplication
-        let mapping = DisplayMapper.map(saved: layout.displays, current: beforeDisplays)
-        guard !mapping.isEmpty else { throw WorkspaceError.unavailable("Nessun monitor disponibile.") }
+        guard !beforeDisplays.isEmpty else { throw WorkspaceError.unavailable("Nessun monitor disponibile.") }
         let sameSetup = Set(layout.displays.map(\.id)) == Set(beforeDisplays.map(\.id))
         if !sameSetup && !preferences.adaptToDifferentDisplays {
             throw WorkspaceError.unavailable("Monitor diversi da quelli salvati. Collega i monitor originali o abilita l’adattamento nelle impostazioni.")
         }
         var report = RestoreReport()
+        if focusedOnly == nil, let arrangement = layout.displayArrangement, arrangement.enabled {
+            progress("Ripristino la disposizione dei monitor…")
+            do { report.displayArrangementRestored = try await DisplayArrangementService.restore(arrangement, spaces: spaces) }
+            catch is CancellationError { throw CancellationError() }
+            catch { report.displayArrangementFailed = true; report.warnings.append(error.localizedDescription) }
+            beforeDisplays = try spaces.displays()
+        }
+        // Rebuild geometry and Space mappings only after the display configuration settles.
+        let mapping = DisplayMapper.map(saved: layout.displays, current: beforeDisplays)
         if !sameSetup { report.warnings.append("Configurazione monitor diversa: finestre adattate ai monitor disponibili.") }
         if !NSScreen.screensHaveSeparateSpaces && beforeDisplays.count > 1 {
             report.warnings.append("I monitor condividono gli Spaces: il numero di desktop è comune ai display.")

@@ -130,6 +130,8 @@ import WorkspaceCore
         if !failures.isEmpty { record(failures.joined(separator: "\n")) }
     }
     private func scheduleRestore() {
+        // Our own display transaction emits screen-change notifications too.
+        guard !busy else { return }
         autoRestore?.cancel()
         autoRestore = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -202,6 +204,11 @@ import WorkspaceCore
             updated.displays += layout.displays.filter { previous in referencedDisplays.contains(previous.id) && !updated.displays.contains(where: { $0.id == previous.id }) }
             updated.id = layout.id; updated.createdAt = layout.createdAt; updated.updatedAt = Date()
             updated.lastRestoredAt = layout.lastRestoredAt; updated.excludedAppIDs = layout.excludedAppIDs
+            if let previous = layout.displayArrangement {
+                // Keep a disabled preference, and retain the setup if capture was temporarily unavailable.
+                if updated.displayArrangement == nil { updated.displayArrangement = previous }
+                updated.displayArrangement?.enabled = previous.enabled
+            }
             library.layouts[index] = updated
         }
         library.activeLayoutID = layout.id; try persist()
@@ -214,7 +221,7 @@ import WorkspaceCore
     }
     func restoreNow(_ layout: WorkspaceCore.Layout, destination: RestoreDestination, launchApps: Bool) async throws -> String {
         let report = try await engine.restore(layout, preferences: library.preferences, destination: destination, launchApps: launchApps)
-        lastRestoreHadFailures = report.failed > 0 || report.missing > 0
+        lastRestoreHadFailures = report.failed > 0 || report.missing > 0 || report.displayArrangementFailed
         // Even a partial restore becomes active, but its issues remain explicit in the report.
         library.activeLayoutID = layout.id; selectedID = layout.id
         if let index = library.layouts.firstIndex(where: { $0.id == layout.id }) { library.layouts[index].lastRestoredAt = Date() }
@@ -274,6 +281,24 @@ import WorkspaceCore
         guard let i = library.layouts.firstIndex(where: { $0.id == layout.id }),
               let j = library.layouts[i].windows.firstIndex(where: { $0.id == window.id }) else { return }
         library.layouts[i].windows[j] = window; library.layouts[i].updatedAt = Date(); savePreferences()
+    }
+    func saveDisplayArrangement(in layout: WorkspaceCore.Layout) {
+        guard !busy, let index = library.layouts.firstIndex(where: { $0.id == layout.id }) else { return }
+        do {
+            let arrangement = try DisplayArrangementService.capture(spaces.displays())
+            library.layouts[index].displayArrangement = arrangement
+            library.layouts[index].updatedAt = Date()
+            try persist()
+            status = "Disposizione di \(arrangement.displays.count) monitor salvata per «\(layout.name)»."
+            record(status)
+        } catch { self.error = error.localizedDescription }
+    }
+    func setDisplayArrangementEnabled(_ enabled: Bool, in layout: WorkspaceCore.Layout) {
+        guard !busy, let index = library.layouts.firstIndex(where: { $0.id == layout.id }),
+              library.layouts[index].displayArrangement != nil else { return }
+        library.layouts[index].displayArrangement?.enabled = enabled
+        library.layouts[index].updatedAt = Date()
+        savePreferences()
     }
     func exportLayouts(selected: WorkspaceCore.Layout? = nil) {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = (selected?.name ?? "DeskAnchor") + ".json"
@@ -411,6 +436,7 @@ import WorkspaceCore
         var result = Library()
         result.layouts = [WorkspaceCore.Layout(name: "Sviluppo", scope: .workspace, displays: [display], apps: apps, windows: windows),
                           WorkspaceCore.Layout(name: "Scrittura", scope: .desktop, displays: [display], apps: [apps[1]], windows: [windows[1]])]
+        result.layouts[0].displayArrangement = try? DisplayArrangement(displays: [display])
         result.activeLayoutID = result.layouts[0].id
         return result
     }

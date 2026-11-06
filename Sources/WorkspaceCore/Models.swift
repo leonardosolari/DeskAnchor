@@ -123,12 +123,15 @@ public struct Layout: Codable, Equatable, Identifiable, Sendable {
     public var apps: [AppRecord]
     public var windows: [WindowRecord]
     public var excludedAppIDs: Set<String>
+    /// Absent in older archives; window-only layouts keep their original behavior.
+    public var displayArrangement: DisplayArrangement?
     public init(id: UUID = UUID(), name: String, scope: LayoutScope, displays: [DisplayRecord],
                 apps: [AppRecord], windows: [WindowRecord], excludedAppIDs: Set<String> = []) {
         self.id = id; self.name = name; self.scope = scope; createdAt = Date(); updatedAt = Date()
         self.displays = displays; self.apps = apps; self.windows = windows; self.excludedAppIDs = excludedAppIDs
     }
     public func validate() throws {
+        try displayArrangement?.validate()
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.count <= 120 else {
             throw WorkspaceError.invalid("Il nome deve contenere da 1 a 120 caratteri.")
         }

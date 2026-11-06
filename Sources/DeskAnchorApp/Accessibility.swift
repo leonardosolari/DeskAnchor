@@ -119,8 +119,9 @@ struct CaptureResult {
             if scope == .workspace || windows.contains(where: { $0.record.appID == bundleID }) { apps.append(appRecord) }
         }
         windows.sort { ($0.record.stackingOrder ?? Int.max) < ($1.record.stackingOrder ?? Int.max) }
-        let layout = Layout(name: name, scope: scope, displays: displays, apps: apps,
+        var layout = Layout(name: name, scope: scope, displays: displays, apps: apps,
                             windows: windows.map(\.record), excludedAppIDs: [])
+        layout.displayArrangement = try? DisplayArrangementService.capture(displays)
         return CaptureResult(layout: layout, windows: windows, warnings: warnings, inaccessibleAppIDs: inaccessible)
     }
     /// A few applications expose only the windows on the current Space. Visit the missing windows' Spaces

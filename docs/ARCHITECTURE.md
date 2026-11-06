@@ -10,13 +10,17 @@ DeskAnchor is a native macOS application built as a Swift package, without exter
 
 Displays are identified by UUID. Window frames are recorded in the coordinate system used by Accessibility; normalized geometry supports layouts with different display sizes or missing monitors.
 
+An optional `DisplayArrangement` stores display UUIDs, names and full frames independently of window geometry. The origin `(0, 0)` identifies the saved primary display in Quartz coordinates. New captures populate this field for extended displays; archives without it remain compatible. A desktop-only update preserves it, and users can capture just the arrangement or disable its restoration per layout.
+
+`DisplayArrangementService` uses public CoreGraphics APIs (`CGBeginDisplayConfiguration`, `CGConfigureDisplayOrigin`, `CGCompleteDisplayConfiguration`) in one session-scoped transaction. The primary display is configured first. Exact UUIDs and logical sizes are required; mirroring is rejected without changing its state. Failed staging cancels the transaction, and successful commits are verified against both AppKit/Spaces and Quartz geometry before window capture, display mapping or application launching. Arrangement failures are reported explicitly, including a failing CLI response, while window restoration continues using actual geometry. Focused-window restore skips physical display configuration. Automatic restore ignores screen notifications received during an operation to avoid reacting to its own transaction.
+
 Window matching prefers a window ID from the same application launch, followed by AX identifiers, titles and application-local order. Assignments are one-to-one. Applications remain responsible for reopening their own documents and windows.
 
 Spaces inventory uses optional SkyLight symbols resolved at runtime. Mission Control's Accessibility interface creates, removes and selects desktops. Transitions are verified by observing the actual active Space. Window movement tries an available native API, then a title-bar drag with Control–Arrow navigation. SIP is not modified.
 
 Some applications expose windows only on their active desktop. Capture can visit relevant Spaces and then return to the original desktop. Additional scan failures produce a partial capture; an incomplete update keeps the previous layout.
 
-The macOS integration is isolated in `SpacesService.swift` and `Accessibility.swift`. Public implementation references include [Hammerspoon Spaces](https://github.com/Hammerspoon/hammerspoon/tree/master/extensions/spaces) and [DockDoor's private API declarations](https://github.com/ejbills/DockDoor/blob/main/DockDoor/Utilities/PrivateApis.swift).
+The macOS integration is isolated in `SpacesService.swift`, `Accessibility.swift` and `DisplayArrangementService.swift`. Public implementation references include [Hammerspoon Spaces](https://github.com/Hammerspoon/hammerspoon/tree/master/extensions/spaces) and [DockDoor's private API declarations](https://github.com/ejbills/DockDoor/blob/main/DockDoor/Utilities/PrivateApis.swift).
 
 ## Persistence and compatibility
 
